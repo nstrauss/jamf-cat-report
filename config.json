@@ -1,0 +1,10 @@
+{
+    "jamf": {
+        "url": "https://jamf.myorg.com:8443/JSSResource/",
+        "user": "api_user",
+        "pass": "super_secret_pass"
+    },
+    "itunes": { 
+        "country_code": "us"
+    }
+}
