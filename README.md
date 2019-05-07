@@ -32,7 +32,7 @@ Required Jamf Pro privileges:
 
 Requires requests for API calls. Use `pip install --user requests` to install if you need it.  
 
-Copy example config to `config.json` and change values as needed before running. iTunes API country code can be changed following ISO 3166-1 format (https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)  
+Change values in `config.json` as needed before running. iTunes API country code can be changed following ISO 3166-1 format (https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)  
 
 To get app counts an advanced search is created per app, devices counted, and then search object deleted. This can increase advanced search count by a lot, but shouldn't impact the database since the advanced search object is temporary. Tested with python3 on macOS 10.13 and 10.14.  
 
