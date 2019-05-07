@@ -22,7 +22,6 @@ def import_conf():
     global WORKING_DIR
     WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
     config_json = WORKING_DIR + "/" + "config.json"
-    print(config_json)
     with open(config_json) as json_data:
         config = json.load(json_data)
 
@@ -252,7 +251,9 @@ def main():
 
     # Write CSV file and headers
     now = datetime.datetime.now()
-    csv_file = WORKING_DIR + "/" + now.strftime("%Y-%m-%d") + "-jamf_cat_report" + ".csv"
+    csv_file = (
+        WORKING_DIR + "/" + now.strftime("%Y-%m-%d") + "-jamf_cat_report" + ".csv"
+    )
     with open(csv_file, "w") as f:
         w = csv.writer(f, delimiter=",")
         w.writerow(fields)
