@@ -7,14 +7,15 @@ import csv
 import datetime
 import itertools
 import json
-import re
 import os
+import re
 import sys
+import time
 from xml.etree import ElementTree as ET
 
 import requests
 
-__version__ = "0.2"
+__version__ = "0.3"
 
 
 def import_conf():
@@ -79,7 +80,7 @@ def itunes_api_get(adam_id):
     return raw_json
 
 
-def jamf_api_advancedsearch(app_id, bundle_id):
+def jamf_api_advancedsearch(app_id, bundle_id, retry_count=3):
     """Create advanced search object, get device count data, and delete."""
     api_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/0"
     xml_body = """<advanced_mobile_device_search>
@@ -116,7 +117,18 @@ def jamf_api_advancedsearch(app_id, bundle_id):
     tmp_search_id = raw_xml.find("id").text
 
     # API get for results of advanced search
-    search_data = jamf_api_get("advancedmobiledevicesearches/id/" + tmp_search_id)
+    for _ in range(retry_count):
+        try:
+            search_data = jamf_api_get(
+                "advancedmobiledevicesearches/id/" + tmp_search_id
+            )
+        except requests.exceptions.HTTPError:
+            # Jamf Pro API can be slow to create advanced search objects
+            # Wait 1 second before next attempt. Default is 3 attempts
+            # Use --retry flag to increase attempts
+            time.sleep(1)
+        else:
+            break
 
     # Count number of devices in returned JSON
     count = len(search_data["advanced_mobile_device_search"]["mobile_devices"])
@@ -205,6 +217,15 @@ def main():
         "Speeds up reporting by a lot. installed_count will be None.",
     )
     parser.add_argument(
+        "--retry",
+        action="store",
+        type=int,
+        default=3,
+        nargs="?",
+        help="Number of retry attempts to get advanced search data after object is created. "
+        "Usually used when Jamf Cloud is slow to create search objects.",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=__version__,
@@ -212,7 +233,7 @@ def main():
     )
     arg = parser.parse_args()
 
-    # Get mobile device app ID list. Default is all from Jamf Pro.
+    # Get mobile device app ID list. Default is all from Jamf Pro
     if arg.app_id is not None:
         app_ids = []
         for app_id in arg.app_id:
@@ -296,7 +317,7 @@ def main():
 
             # Get device count
             if arg.disable_count is not True:
-                installed_count = jamf_api_advancedsearch(app_id, bundle_id)
+                installed_count = jamf_api_advancedsearch(app_id, bundle_id, arg.retry)
             else:
                 installed_count = "None"
 

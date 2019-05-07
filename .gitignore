@@ -18,3 +18,5 @@
 # Project specific
 config_ex.json
 *_report.csv
+.vscode
+config.json

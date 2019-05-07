@@ -52,6 +52,10 @@ To get app counts an advanced search is created per app, devices counted, and th
                         is installed. Speeds up reporting by a lot.
                         installed_count will be None.
 
+--retry                 Number of retry attempts to get advanced search data
+                        after object is created. Usually used when Jamf Cloud
+                        is slow to create search objects.
+
 --version               Print version and exit.
 ```
 
