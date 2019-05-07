@@ -27,7 +27,7 @@ Reported fields:
 Note: Only apps where device based VPP is enabled are included. Want more fields? Submit a PR! :)  
 
 Required Jamf Pro privileges:
-- Create and read for Advanced Mobile Device Searches
+- Create, read, update, and delete for Advanced Mobile Device Searches
 - Read for Mobile Device Apps
 
 Requires requests for API calls. Use `pip install --user requests` to install if you need it.  
