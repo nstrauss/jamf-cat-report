@@ -56,6 +56,31 @@ def jamf_api_get(resource):
     return raw_json
 
 
+def jamf_api_search_get(resource, retry_count=3):
+    """Function for Jamf API advanced search get. Max retries can be incremented
+    as needed based on speed of API advanced search object creation."""
+    api_resource = JAMF_API_URL + resource
+    headers = {"Accept": "application/json"}
+    r = requests.get(api_resource, auth=(JAMF_API_USER, JAMF_API_PASS), headers=headers)
+
+    for _ in range(retry_count):
+        try:
+            r.raise_for_status()
+        except requests.exceptions.HTTPError:
+            # Jamf Pro API can be slow to create advanced search objects
+            # Wait 1 second before next attempt. Default is 3 attempts
+            # Use --retry flag to increase attempts
+            time.sleep(1)
+        else:
+            break
+
+    if r.json():
+        raw_json = r.json()
+    else:
+        raw_json = None
+    return raw_json
+
+
 def get_adam_id(itunes_url):
     """Regex to get app adam ID from iTunes URL."""
     pattern = re.compile(r"id(\d+)(?=\?)")
@@ -117,21 +142,13 @@ def jamf_api_advancedsearch(app_id, bundle_id, retry_count=3):
     tmp_search_id = raw_xml.find("id").text
 
     # API get for results of advanced search
-    for _ in range(retry_count):
-        try:
-            search_data = jamf_api_get(
-                "advancedmobiledevicesearches/id/" + tmp_search_id
-            )
-        except requests.exceptions.HTTPError:
-            # Jamf Pro API can be slow to create advanced search objects
-            # Wait 1 second before next attempt. Default is 3 attempts
-            # Use --retry flag to increase attempts
-            time.sleep(1)
-        else:
-            break
+    search_data = jamf_api_search_get(
+        "advancedmobiledevicesearches/id/" + tmp_search_id, retry_count
+    )
 
     # Count number of devices in returned JSON
-    count = len(search_data["advanced_mobile_device_search"]["mobile_devices"])
+    if search_data is not None:
+        count = len(search_data["advanced_mobile_device_search"]["mobile_devices"])
 
     # Delete advanced search object
     tmp_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/" + tmp_search_id
