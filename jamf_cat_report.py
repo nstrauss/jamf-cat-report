@@ -81,30 +81,6 @@ def jamf_api_search_get(resource, retry_count=3):
     return raw_json
 
 
-def get_adam_id(itunes_url):
-    """Regex to get app adam ID from iTunes URL."""
-    pattern = re.compile(r"id(\d+)(?=\?)")
-    adam_id = str(pattern.findall(itunes_url)[0])
-    if adam_id.isdigit() is False:
-        adam_id = None
-    return adam_id
-
-
-def itunes_api_get(adam_id):
-    """Basic function for iTunes API get."""
-    api_resource = ITUNES_API_URL + adam_id
-    r = requests.get(api_resource)
-
-    try:
-        r.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        print("Error: " + str(e))
-        sys.exit(1)
-
-    raw_json = r.json()
-    return raw_json
-
-
 def jamf_api_advancedsearch(app_id, bundle_id, retry_count=3):
     """Create advanced search object, get device count data, and delete."""
     api_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/0"
@@ -160,6 +136,30 @@ def jamf_api_advancedsearch(app_id, bundle_id, retry_count=3):
         print("Error: " + str(e))
         sys.exit(1)
     return str(count)
+
+
+def get_adam_id(itunes_url):
+    """Regex to get app adam ID from iTunes URL."""
+    pattern = re.compile(r"id(\d+)(?=\?)")
+    adam_id = str(pattern.findall(itunes_url)[0])
+    if adam_id.isdigit() is False:
+        adam_id = None
+    return adam_id
+
+
+def itunes_api_get(adam_id):
+    """Basic function for iTunes API get."""
+    api_resource = ITUNES_API_URL + adam_id
+    r = requests.get(api_resource)
+
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print("Error: " + str(e))
+        sys.exit(1)
+
+    raw_json = r.json()
+    return raw_json
 
 
 def list_apps():
@@ -336,7 +336,7 @@ def main():
             if arg.disable_count is not True:
                 installed_count = jamf_api_advancedsearch(app_id, bundle_id, arg.retry)
             else:
-                installed_count = "None"
+                installed_count = str("0")
 
             # Get iTunes API data
             adam_id = get_adam_id(itunes_url)
