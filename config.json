@@ -1,6 +1,6 @@
 {
     "jamf": {
-        "url": "https://jamf.myorg.com:8443/JSSResource/",
+        "url": "https://jamf.myorg.com:8443",
         "user": "api_user",
         "pass": "super_secret_pass"
     },
