@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 """Python tool to output Jamf Pro mobile device app catalog info."""
 
@@ -11,11 +11,12 @@ import os
 import re
 import sys
 import time
+import uuid
 from xml.etree import ElementTree as ET
 
 import requests
 
-__version__ = "0.3"
+__version__ = "0.4"
 
 
 def import_conf():
@@ -56,92 +57,114 @@ def jamf_api_get(resource):
     return raw_json
 
 
-def jamf_api_search_get(resource, retry_count=3):
+def jamf_api_search_get(resource, retry_count=5):
     """Function for Jamf API advanced search get. Max retries can be incremented
     as needed based on speed of API advanced search object creation."""
-    api_resource = JAMF_API_URL + resource
     headers = {"Accept": "application/json"}
-    r = requests.get(api_resource, auth=(JAMF_API_USER, JAMF_API_PASS), headers=headers)
 
-    for _ in range(retry_count):
-        try:
-            r.raise_for_status()
-        except requests.exceptions.HTTPError:
-            # Jamf Pro API can be slow to create advanced search objects
-            # Wait 1 second before next attempt. Default is 3 attempts
-            # Use --retry flag to increase attempts
-            time.sleep(1)
+    # Jamf Pro API can be slow to create advanced search objects
+    # Wait 10 seconds before next attempt. Default is 5 attempts
+    # Use --retry flag to increase attempts
+    time.sleep(5)
+    for _ in range(retry_count + 1):
+        r = requests.get(resource, auth=(JAMF_API_USER, JAMF_API_PASS), headers=headers)
+        if r.status_code != 200:
+            print(f"Get Error: {r.status_code} {resource}")
+            time.sleep(10)
         else:
             break
 
-    if r.json():
+    try:
         raw_json = r.json()
-    else:
+    except json.decoder.JSONDecodeError:
         raw_json = None
+
     return raw_json
+
+
+def jamf_api_search_delete(resource, retry_count=5):
+    """Function for Jamf API advanced search deletion. Max retries can be incremented
+    as needed based on speed of API advanced search object creation."""
+    headers = {"Accept": "application/json"}
+
+    # Jamf Pro API can be slow to create advanced search objects
+    # Wait 10 seconds before next attempt. Default is 5 attempts
+    # Use --retry flag to increase attempts
+    time.sleep(5)
+    for _ in range(retry_count + 1):
+        r = requests.delete(
+            resource, auth=(JAMF_API_USER, JAMF_API_PASS), headers=headers
+        )
+        if r.status_code != 200:
+            print(f"Delete Error: {r.status_code} {resource}")
+            time.sleep(10)
+        else:
+            break
 
 
 def jamf_api_advancedsearch(app_id, bundle_id, retry_count=3):
     """Create advanced search object, get device count data, and delete."""
     api_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/0"
-    xml_body = """<advanced_mobile_device_search>
-<id>0</id>
-<name>api_tempsearch_id_%s</name>
-<view_as>Standard Web Page</view_as>
-<criteria>
-    <size>1</size>
-    <criterion>
-        <name>App Identifier</name>
-        <priority>0</priority>
-        <and_or>and</and_or>
-        <search_type>is</search_type>
-        <value>%s</value>
-    </criterion>
-</criteria>
-</advanced_mobile_device_search>""" % (
-        app_id,
-        bundle_id,
-    )
+    random_gen = uuid.uuid4()
+
+    # Construct XML
+    search = ET.Element("advanced_mobile_device_search")
+    ET.SubElement(search, "name").text = str(f"api_tmp_id_{app_id}_{random_gen}")
+    criteria = ET.SubElement(search, "criteria")
+    ET.SubElement(criteria, "size").text = str("1")
+    criterion = ET.SubElement(criteria, "criterion")
+    ET.SubElement(criterion, "name").text = str("App Identifier")
+    ET.SubElement(criterion, "priority").text = str("0")
+    ET.SubElement(criterion, "and_or").text = str("and")
+    ET.SubElement(criterion, "search_type").text = str("is")
+    ET.SubElement(criterion, "value").text = str(f"{bundle_id}")
+    xml_raw = ET.ElementTree(search)
+    xml_root = xml_raw.getroot()
+    xml_data = ET.tostring(xml_root)
     # Create advanced search
     post_search = requests.post(
-        api_resource, auth=(JAMF_API_USER, JAMF_API_PASS), data=xml_body
+        api_resource, auth=(JAMF_API_USER, JAMF_API_PASS), data=xml_data
     )
 
     try:
         post_search.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        print("Error: " + str(e))
+        print("Create Error: " + str(e))
         sys.exit(1)
 
     # Get generated advanced search ID from response
     raw_xml = ET.fromstring(post_search.content)
     tmp_search_id = raw_xml.find("id").text
 
-    # API get for results of advanced search
-    search_data = jamf_api_search_get(
-        "advancedmobiledevicesearches/id/" + tmp_search_id, retry_count
-    )
+    # Get results of newly created advanced search
+    tmp_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/" + tmp_search_id
+    search_data = jamf_api_search_get(tmp_resource, retry_count)
 
     # Count number of devices in returned JSON
+    count = str("0")
     if search_data is not None:
         count = len(search_data["advanced_mobile_device_search"]["mobile_devices"])
 
     # Delete advanced search object
-    tmp_resource = JAMF_API_URL + "advancedmobiledevicesearches/id/" + tmp_search_id
-    delete_search = requests.delete(tmp_resource, auth=(JAMF_API_USER, JAMF_API_PASS))
+    jamf_api_search_delete(tmp_resource, retry_count)
 
-    try:
-        delete_search.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        print("Error: " + str(e))
-        sys.exit(1)
     return str(count)
 
 
 def get_adam_id(itunes_url):
     """Regex to get app adam ID from iTunes URL."""
-    pattern = re.compile(r"id(\d+)(?=\?)")
-    adam_id = str(pattern.findall(itunes_url)[0])
+    try:
+        pattern = re.compile(r"id(\d+)(?=\?)")
+        adam_id = str(pattern.findall(itunes_url)[0])
+    except IndexError:
+        pass
+
+    try:
+        pattern = re.compile(r"id(\d+)")
+        adam_id = str(pattern.findall(itunes_url)[0])
+    except (IndexError, TypeError):
+        pass
+
     if adam_id.isdigit() is False:
         adam_id = None
     return adam_id
@@ -213,25 +236,16 @@ def main():
         help="Pass in a mobile device app ID. "
         "Multiple IDs can be included separated by space. e.g. --app-id 101 110 605",
     )
-    # group.add_argument(
-    #     "--app-name", metavar="jamf_pro_app_name", help="Pass in a mobile device app name."
-    # )
     group.add_argument(
         "--file-path",
         metavar="path_to_file",
         help="Path to file with list of new line separated app IDs.",
     )
-    # group.add_argument(
-    #     "--name-list",
-    #     metavar="path_to_file",
-    #     default="",
-    #     help="Path to file with list of new line separated app names.",
-    # )
     parser.add_argument(
-        "--disable-count",
+        "--enable-count",
         action="store_true",
-        help="Disable count of number of iOS devices on which an app is installed. "
-        "Speeds up reporting by a lot. installed_count will be None.",
+        help="Enable count of number of iOS devices on which an app is installed. "
+        "Slows down reporting significantly.",
     )
     parser.add_argument(
         "--retry",
@@ -279,18 +293,20 @@ def main():
         "used_licenses",
         "remaining_licenses",
         "total_licenses",
+        "free",
         "price",
         "latest_release",
         "average_rating",
         "bundle_id",
         "jamf_url",
-        "itunes_url",
+        "jamf_itunes_url",
+        "apple_app_url",
     ]
 
     # Write CSV file and headers
     now = datetime.datetime.now()
     csv_file = (
-        WORKING_DIR + "/" + now.strftime("%Y-%m-%d") + "-jamf_cat_report" + ".csv"
+        WORKING_DIR + "/" + now.strftime("%Y-%m-%d-%S") + "-jamf_cat_report" + ".csv"
     )
     with open(csv_file, "w") as f:
         w = csv.writer(f, delimiter=",")
@@ -309,11 +325,8 @@ def main():
             name = str(general_data["name"])
             main_category = str(general_data["category"]["name"])
             bundle_id = str(general_data["bundle_id"])
-            itunes_url = str(general_data["itunes_store_url"])
+            jamf_itunes_url = str(general_data["itunes_store_url"])
             jps_url = JAMF_URL + "/mobileDeviceApps.html?id=" + app_id
-
-            # scope_data = app_data['scope']
-            # all_mobile_devices = []
 
             # Get Self Service categories - max five
             ss_data = app_data["self_service"]
@@ -333,18 +346,23 @@ def main():
             total_licenses = str(vpp_data["total_vpp_licenses"])
 
             # Get device count
-            if arg.disable_count is not True:
+            if arg.enable_count is True:
                 installed_count = jamf_api_advancedsearch(app_id, bundle_id, arg.retry)
             else:
                 installed_count = str("0")
 
             # Get iTunes API data
-            adam_id = get_adam_id(itunes_url)
+            adam_id = get_adam_id(jamf_itunes_url)
             itunes_raw = itunes_api_get(adam_id)
             try:
                 itunes_data = itunes_raw["results"][0]
-                itunes_price = str(itunes_data["price"])
+                itunes_price = float(itunes_data["price"])
+                if itunes_price > 0:
+                    free = "False"
+                else:
+                    free = "True"
                 itunes_release_date = str(itunes_data["currentVersionReleaseDate"])
+                apple_itunes_url = str(itunes_data["trackViewUrl"])
             except Exception:
                 itunes_price = "None"
                 itunes_release_date = "None"
@@ -369,12 +387,14 @@ def main():
                 used_licenses,
                 remaining_licenses,
                 total_licenses,
+                free,
                 itunes_price,
                 itunes_release_date,
                 itunes_avg_rating,
                 bundle_id,
                 jps_url,
-                itunes_url,
+                jamf_itunes_url,
+                apple_itunes_url,
             ]
 
             with open(csv_file, "a") as f:

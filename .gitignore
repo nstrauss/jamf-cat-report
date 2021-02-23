@@ -20,3 +20,6 @@ config_ex.json
 *_report.csv
 .vscode
 config.json
+
+# Reports
+*jamf_cat_report.csv
